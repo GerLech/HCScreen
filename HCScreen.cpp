@@ -7,7 +7,6 @@
 #include "HCScreen.h"
 #include "FS.h"
 #include "SD.h"
-
 #define CHAR_WIDTH 6
 
 //This is a mapping table for special characters
@@ -29,6 +28,8 @@ const char ANSI[128] = {
   208,164,149,162,147,228,148,246,
   155,151,163,150,129,236,232,152
 };
+
+
 
 //constructor prefill private members
 HCScreen::HCScreen(Adafruit_ST7735& tft): _tft(tft) {
@@ -75,16 +76,24 @@ void HCScreen::showContent()
     dLine++;
   }
   String txt = "";
+  String txt1 = "";
+  uint8_t idx = 0;
   while (dLine < _screenLines) {
     txt = "";
-    if (line < _contentLines) txt = _content[line];
-    if (_selectedLine == line) {
-      showLine(dLine,txt,_selFontColor,_selBgColor);
+    if (line < _contentLines) {
+      txt = _content[line];
+      if (_selectedLine == line) {
+        showLine(dLine,txt,_selFontColor,_selBgColor);
+      } else {
+        showLine(dLine,txt,_fontColor,_bgColor);
+      }
+      dLine ++;
+      line ++;
     } else {
       showLine(dLine,txt,_fontColor,_bgColor);
+      dLine ++;
+      line ++;
     }
-    dLine ++;
-    line ++;
   }
 }
 
@@ -102,7 +111,7 @@ void HCScreen::showLine(uint8_t lin, String txt, uint16_t font, uint16_t bg) {
     if (tIndex < tLen) {
       c = txt[tIndex];
       if (c>127) c=ANSI[c-128];
-      if (c > 32) _tft.print(c);
+      if (c > 31) _tft.print(c);
       tIndex++;
     } else {
       _tft.print(" ");
@@ -116,18 +125,36 @@ void HCScreen::showLine(uint8_t lin, String txt, uint16_t font, uint16_t bg) {
 void HCScreen::showCodeset() {
   _showTitle = 0;
   _selectedLine = -1;
+  _startLine = 0;
   _tft.fillScreen(_bgColor);
   uint8_t lin =0;
   uint8_t pos = 0;
   char c = 0;
   for (lin = 0; lin<16; lin++) {
     _tft.setCursor(_leftMargin,(lin * 8));
-    for (pos = 0; pos < 15; pos++) {
+    for (pos = 0; pos < 16; pos++) {
       _tft.print(c);
       c++;
     }
   }
 
+}
+
+void HCScreen::showIcon(uint8_t x, uint8_t y, const HCIcon *icon){
+  if (icon) {
+    _selectedLine = -1;
+    _showTitle = 0;
+    uint8_t ix = 0;
+    uint8_t iy = 0;
+    uint16_t idx = 0;
+    uint16_t color = 0;
+    for (iy = 0; iy<icon->height; iy++){
+      for (ix = 0; ix<icon->width; ix++) {
+        color = _tft.Color565(icon->pixel_data[idx++], icon->pixel_data[idx++], icon->pixel_data[idx++]);
+        _tft.drawPixel(x+ix,y+iy,color);
+      }
+    }
+  }
 }
 
 //Allows to set a title bar on top of the display
@@ -152,8 +179,98 @@ void HCScreen::setMenu(String menu[],uint8_t entries){
   for (i=0; i<entries; i++){
     _content[i]=menu[i];
   }
+  _tft.fillScreen(_bgColor);
   _selectedLine = 0;
   _contentLines = entries;
+  _startLine = 0;
+  showContent();
+}
+
+//fill content with directory SDcs is the pin number used for
+//card readers chip select
+void HCScreen::setDirectory(String path, uint8_t SDcs){
+  uint8_t cnt = 1;
+  if (_title == "") _title = "/";
+  _content[0]=".."; //to exit current menu
+  if(!SD.begin(SDcs)){
+      _content[cnt]="No Card";
+      _title = "Error";
+      cnt++;
+  } else {
+    Serial.println(path);
+    Serial.println(_title);
+    if (!path.startsWith("/") ) {
+      if (_title.endsWith("/")) {
+        path = _title + path;
+      } else {
+        path = _title + "/" + path;
+      }
+    }
+    if (path == "") path = "/";
+    _title = path;
+    cnt = loadDir(SD,path,cnt);
+  }
+  _selectedLine = 0;
+  _startLine = 0;
+  _contentLines = cnt;
+  _showTitle = 1;
+  showContent();
+}
+
+void HCScreen::setTextFile(String path, String fileName) {
+  int8_t idx = 0;
+  if (!path.endsWith("/")) path += "/";
+  File dataFile = SD.open(path+fileName);
+  _showTitle = 1;
+  _title = fileName;
+  _selectedLine = -1; //no line selection
+  uint8_t lin = 0;
+  String line = "";
+  String txt = "";
+  char c = 0;
+  // if the file is available, write to it:
+  if (dataFile) {
+    while (dataFile.available() && (lin<100)) {
+      line = "";
+      do {
+        c= dataFile.read();
+        if (c > 31) {
+          if (c==0xc3) {
+            c=dataFile.read();
+            c=c+64; //convert to ANSI Latin 1
+          }
+          if (c==0xc2) {
+            c=dataFile.read();
+          }
+        line += String(c);
+        }
+      } while ((c != 13) && dataFile.available());
+      do {
+        if (line.length() >= _lineLength ) {
+          idx = line.lastIndexOf(" ",_lineLength);
+          if (idx >= 0) {
+            txt=line.substring(0,idx);
+            line = line.substring(++idx);
+          } else {
+            txt=line.substring(0,_lineLength);
+            line = line.substring(_lineLength);
+          }
+        } else {
+          txt = line;
+          line = "";
+        }
+        Serial.println(txt);
+        _content[lin]=txt;
+        lin++;
+      } while ((line != "") && (lin < 100)) ;
+    }
+    dataFile.close();
+    _contentLines = lin;
+  }  else {
+    _content[0] = "File not open";
+    _contentLines = 1;
+  }
+  _startLine = 0;
   showContent();
 }
 
@@ -200,19 +317,27 @@ uint16_t HCScreen::convertColor(unsigned long webColor) {
 //are more lines in the content array, the display will be scrolled up
 void HCScreen::selectNext() {
 
+  if (_selectedLine<0) { //selection is not activated
+    if ((_startLine + _screenLines - _showTitle) < (_contentLines-1)) _startLine++;
+  } else {
     _selectedLine++;
     if (_selectedLine >= _contentLines) _selectedLine = _contentLines-1;
     if ((_selectedLine - _startLine + _showTitle) >= _screenLines) _startLine++;
-    showContent();
+  }
+  showContent();
 }
 
 
 //moves the selected line upwards if the top is reached and there
 //are more lines in the content array, the display will be scrolled up
 void HCScreen::selectPrevious() {
+  if (_selectedLine<0) { //selection is not activated
+    if (_startLine  > 0) _startLine--;
+  } else {
     if (_selectedLine > 0) _selectedLine--;
     if (_selectedLine < _startLine) _startLine--;
-    showContent();
+  }
+  showContent();
 }
 
 //return the currently selected line if selection is activated
@@ -223,6 +348,11 @@ String HCScreen::getSelection() {
   } else {
     return _content[_selectedLine];
   }
+}
+
+//return the title
+String HCScreen::getTitle() {
+  return _title;
 }
 
 //return the index inside content array of the currently selected line
@@ -240,4 +370,37 @@ void HCScreen::setLineHeight(uint8_t height) {
   //and redisplay the content
   init();
   showContent();
+}
+
+uint8_t HCScreen::loadDir(fs::FS &fs, String path, uint8_t cnt){
+    Serial.println(path);
+    uint8_t fcnt = cnt;
+    File root = fs.open(path);
+    if(!root){
+        _content[cnt]="Failed to open directory";
+        fcnt++;
+    }
+    else if(!root.isDirectory()){
+        _content[cnt]="No directory";
+        fcnt++;
+    }
+    else
+    {
+      File file = root.openNextFile();
+      while(file && (fcnt<100)){
+          String name = file.name();
+          //strip _path
+          uint8_t e = name.lastIndexOf("/");
+          name = name.substring(++e);
+          if(file.isDirectory()){
+              _content[fcnt]="*" + name;
+          } else {
+            _content[fcnt]=name;
+          }
+          file = root.openNextFile();
+          fcnt++;
+      }
+    }
+
+  return fcnt;
 }
