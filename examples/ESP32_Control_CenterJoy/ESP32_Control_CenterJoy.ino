@@ -69,6 +69,7 @@ uint8_t sub_menu_cnt = 4;
 volatile int tmp = 0; //to read joy values;
 volatile int whichMenu = 0; //define menu to switch handler
 String lastPath = ""; //to allow .. command in browser
+uint8_t wait;
 
 
 
@@ -164,6 +165,7 @@ void setup() {
 }
 
 void loop() {
+  if (wait ==0) {
   
     //read joystick X currently not used
     tmp = analogRead(JOY_X);
@@ -173,13 +175,15 @@ void loop() {
       //if value > 3000 we select the next entry of a menu
       //or scroll down if no selection active
       screen.selectNext();
+      wait = 20;
     };
     if (tmp < 1000) {
       //if value < 1000 we select the previous entry of a menu
       //or scroll up if no selection active
       screen.selectPrevious();
+      wait = 20;
     }
-    
+  }  
   //select button of the joystick
   if (digitalRead(JOY_BTN)==0) {
     //wait until button was released
@@ -203,4 +207,6 @@ void loop() {
         break;
     }
   }
+  delay(10);
+  if (wait > 0) wait--;
 }
