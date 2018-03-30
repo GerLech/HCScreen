@@ -46,6 +46,13 @@
 #define HC_WHITE   0xFFFFFF
 
 
+typedef struct { // Data stored for ICON
+  unsigned int 	 width;
+  unsigned int 	 height;
+  unsigned int 	 bytes_per_pixel; /* 2:RGB16, 3:RGB, 4:RGBA */
+  unsigned char	 pixel_data[31*31*3+1];
+} HCIcon;
+
 class HCScreen {
 public:
   //public functions
@@ -63,12 +70,21 @@ void setMenu(String menu[],uint8_t entries);
 void setBaseColor(unsigned long font_color, unsigned long bg_color);
 void setSelectionColor(unsigned long font_color, unsigned long bg_color);
 void setTitleColor(unsigned long font_color, unsigned long bg_color);
+void setGridColor(unsigned long font_color, unsigned long bg_color);
 void selectNext();
 void selectPrevious();
+void moveRight(); //move selection to right in grid mode
+void moveLeft(); //move selection to left in grid mode
 String getSelection();
 int8_t getSelectionIndex();
 void showCodeset();
 void setLineHeight(uint8_t height);
+void setDirectory(String path, uint8_t SDcs);
+String getTitle();
+void setTextFile(String path, String fileName);
+void initIconGrid();
+void showIcon(uint8_t x, uint8_t y, const HCIcon *icon=NULL);
+void showIcon(uint8_t index, const HCIcon *icon=NULL);
 
 private:
   //private members
@@ -80,22 +96,31 @@ private:
   uint8_t _bottomMargin; //space pixels bottom
   uint8_t _lineLength; //characters in a line
   int8_t _selectedLine; //selected line -1 = none
+  int8_t _selectedColumn; //xy mode only
   uint16_t _fontColor; //color for font 16 bit tft-format
   uint16_t _bgColor; //color for background 16 bit tft-format
   uint16_t _selFontColor; //color for font in selected line 16 bit tft-format
   uint16_t _selBgColor; //color for background in selected line 16 bit tft-format
   uint16_t _titleFontColor; //color for font in title line 16 bit tft-format
   uint16_t _titleBgColor; //color for background in title line 16 bit tft-format
+  uint16_t _gridSelColor; //color for icon selection 16 bit tft-format
+  uint16_t _gridBgColor; //color for background of icon grid line 16 bit tft-format
   uint8_t _showTitle=0; //if 1 title will be displayed
   String _title; //title to be displayed
   String _content[100]; //content to be displayed
   uint8_t _contentLines = 0; //number of lines in content
   uint8_t _startLine; //first line of content to be displayed
   uint8_t _lineHeight  = 8; //height of a line in pixels 8= minimal value
+  uint8_t _rows = 4; //rows for icon grid
+  uint8_t _columns = 5; //columns for icon grid
+  uint8_t _gridMode = 0; //if 1 grid mode is aktive
 
   uint16_t convertColor(unsigned long webColor );
   void showLine(uint8_t lin, String txt, uint16_t font, uint16_t bg);
-
+  uint8_t loadDir(fs::FS &fs, String path, uint8_t cnt);
+  void showGridSelection(uint16_t color);
+  void showOneLine(uint8_t lin, uint16_t fnt, uint16_t bg);
 };
+
 
 #endif

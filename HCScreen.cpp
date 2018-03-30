@@ -41,6 +41,8 @@ HCScreen::HCScreen(Adafruit_ST7735& tft): _tft(tft) {
   _selBgColor = convertColor(HC_BLACK);
   _titleFontColor = convertColor(HC_YELLOW);
   _titleBgColor = convertColor(HC_BLUE);
+  _gridSelColor = convertColor(HC_RED);
+  _gridBgColor = convertColor(HC_WHITE);
   _title = "";
   _startLine = 0;
   _contentLines = 0;
@@ -139,11 +141,20 @@ void HCScreen::showCodeset() {
   }
 
 }
+//show a 31x31 pixel icon on position calculated from index
+//the bitmap is a rgb bitmap with 8-bit R, G and B
+void HCScreen::showIcon(uint8_t index, const HCIcon *icon){
+  uint8_t row  = index / _columns;
+  uint8_t column = index % _columns;
+  showIcon(column,row,icon);
+}
 
-void HCScreen::showIcon(uint8_t x, uint8_t y, const HCIcon *icon){
+//show a 31x31 pixel icon on position x y
+//the bitmap is a rgb bitmap with 8-bit R, G and B
+void HCScreen::showIcon(uint8_t column, uint8_t row, const HCIcon *icon){
   if (icon) {
-    _selectedLine = -1;
-    _showTitle = 0;
+    uint8_t x = column * 32+1;
+    uint8_t y = row * 32+1;
     uint8_t ix = 0;
     uint8_t iy = 0;
     uint16_t idx = 0;
@@ -183,11 +194,14 @@ void HCScreen::setMenu(String menu[],uint8_t entries){
   _selectedLine = 0;
   _contentLines = entries;
   _startLine = 0;
+  _gridMode = 0;
   showContent();
 }
 
 //fill content with directory SDcs is the pin number used for
 //card readers chip select
+//if SD card cant be mounted, error will be displayed
+//otherwise title bar shows the curent path
 void HCScreen::setDirectory(String path, uint8_t SDcs){
   uint8_t cnt = 1;
   if (_title == "") _title = "/";
@@ -214,9 +228,13 @@ void HCScreen::setDirectory(String path, uint8_t SDcs){
   _startLine = 0;
   _contentLines = cnt;
   _showTitle = 1;
+  _gridMode = 0;
   showContent();
 }
 
+//Display the first 100 lines of a text file
+//long lines will be splitted
+//UTF8 codes will be converted
 void HCScreen::setTextFile(String path, String fileName) {
   int8_t idx = 0;
   if (!path.endsWith("/")) path += "/";
@@ -271,7 +289,21 @@ void HCScreen::setTextFile(String path, String fileName) {
     _contentLines = 1;
   }
   _startLine = 0;
+  _gridMode = 0;
   showContent();
+}
+
+//initialize icon grid calculate rows and columns
+//clear background
+void HCScreen::initIconGrid() {
+  _tft.fillScreen(_gridBgColor);
+  _showTitle = 0;
+  _gridMode = 1;
+  _selectedLine = 0;
+  _selectedColumn = 0;
+  _rows = _tft.height()/32;
+  _columns = _tft.width()/32;
+  showGridSelection(_gridSelColor);
 }
 
 //set font color and background color for normal text
@@ -302,6 +334,15 @@ void HCScreen::setTitleColor(unsigned long font_color, unsigned long bg_color) {
   showContent();
 }
 
+//set selection color and background color for icon grid
+//colors are in the 3-byte RGB format and will be converted
+//to the 16-bit format used by the display
+void HCScreen::setGridColor(unsigned long font_color, unsigned long bg_color) {
+  _gridSelColor = convertColor(font_color);
+  _gridBgColor = convertColor(bg_color);
+  showContent();
+}
+
 //this private function converts colors from 3-byte RGB format
 //to the 16-bit format (5-bit R, 6-bit G and 5-bit B)
 //which is used in the display
@@ -316,34 +357,91 @@ uint16_t HCScreen::convertColor(unsigned long webColor) {
 //moves the selected line downwards if the bottom is reached and there
 //are more lines in the content array, the display will be scrolled up
 void HCScreen::selectNext() {
-
-  if (_selectedLine<0) { //selection is not activated
-    if ((_startLine + _screenLines - _showTitle) < (_contentLines-1)) _startLine++;
+  uint8_t lin;
+  if (_gridMode) {
+    if (_selectedLine < (_rows-1)) {
+      showGridSelection(_gridBgColor);
+      _selectedLine++;
+      showGridSelection(_gridSelColor);
+    }
+  } else if (_selectedLine<0) { //selection is not activated
+      if ((_startLine + _screenLines - _showTitle) < (_contentLines-1)) {
+        _startLine++;
+        showContent();
+      }
   } else {
-    _selectedLine++;
-    if (_selectedLine >= _contentLines) _selectedLine = _contentLines-1;
-    if ((_selectedLine - _startLine + _showTitle) >= _screenLines) _startLine++;
+    if (_selectedLine < (_contentLines - 1)) {
+      showOneLine(_selectedLine,_fontColor,_bgColor);
+      _selectedLine++;
+      if ((_selectedLine - _startLine + _showTitle) >= _screenLines) {
+        _startLine++;
+        showContent();
+      } else {
+        showOneLine(_selectedLine,_selFontColor,_selBgColor);
+      }
+    }
   }
-  showContent();
 }
 
+void HCScreen::showOneLine(uint8_t lin, uint16_t fnt, uint16_t bg) {
+  showLine(lin-_startLine+_showTitle,_content[lin],fnt,bg);
+}
 
 //moves the selected line upwards if the top is reached and there
 //are more lines in the content array, the display will be scrolled up
 void HCScreen::selectPrevious() {
-  if (_selectedLine<0) { //selection is not activated
-    if (_startLine  > 0) _startLine--;
+  if (_gridMode) {
+    if (_selectedLine > 0) {
+      showGridSelection(_gridBgColor);
+      _selectedLine--;
+      showGridSelection(_gridSelColor);
+    }
+  } else if (_selectedLine<0) { //selection is not activated
+      if (_startLine  > 0) {
+        _startLine--;
+        showContent();
+      }
   } else {
-    if (_selectedLine > 0) _selectedLine--;
-    if (_selectedLine < _startLine) _startLine--;
+    if (_selectedLine > 0) {
+      showOneLine(_selectedLine,_fontColor,_bgColor);
+      _selectedLine--;
+      if (_selectedLine < _startLine) {
+        _startLine--;
+        showContent();
+      } else {
+        showOneLine(_selectedLine,_selFontColor,_selBgColor);
+      }
+    }
   }
-  showContent();
+}
+
+//moves the selection to the right
+void HCScreen::moveRight() {
+  if (_gridMode) {
+    if (_selectedColumn < (_columns-1)) {
+      showGridSelection(_gridBgColor);
+      _selectedColumn++;
+      showGridSelection(_gridSelColor);
+    }
+  }
+}
+
+
+//moves the selection to the left
+void HCScreen::moveLeft() {
+  if (_gridMode) {
+    if (_selectedColumn > 0) {
+      showGridSelection(_gridBgColor);
+      _selectedColumn--;
+      showGridSelection(_gridSelColor);
+    }
+  }
 }
 
 //return the currently selected line if selection is activated
 //otherwise an empty string will be returned
 String HCScreen::getSelection() {
-  if (_selectedLine < 0) {
+  if ((_selectedLine < 0) || (_gridMode)) {
     return "";
   } else {
     return _content[_selectedLine];
@@ -358,7 +456,11 @@ String HCScreen::getTitle() {
 //return the index inside content array of the currently selected line
 //or -1 if selection is not activated
 int8_t HCScreen::getSelectionIndex() {
-  return _selectedLine;
+  if (_gridMode) {
+    return _selectedLine * _columns + _selectedColumn;
+  } else {
+    return _selectedLine;
+  }
 }
 
 //change the used line height
@@ -372,6 +474,9 @@ void HCScreen::setLineHeight(uint8_t height) {
   showContent();
 }
 
+
+//load the first 100 entries from a given path
+//if an entry is a directory an asteriks will be shown in front
 uint8_t HCScreen::loadDir(fs::FS &fs, String path, uint8_t cnt){
     Serial.println(path);
     uint8_t fcnt = cnt;
@@ -403,4 +508,11 @@ uint8_t HCScreen::loadDir(fs::FS &fs, String path, uint8_t cnt){
     }
 
   return fcnt;
+}
+
+//draw rectangle around selected selected icon
+void HCScreen::showGridSelection(uint16_t color) {
+  uint8_t x = _selectedColumn * 32;
+  uint8_t y = _selectedLine * 32;
+  _tft.drawRect(x,y,32,32,color);
 }
