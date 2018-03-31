@@ -74,7 +74,11 @@
 #define JOY_Y  14 //Y-pos of joy stick
 #define JOY_X  15 //X-pos of joy stick
 
-
+//some constants
+#define MAIN  0
+#define FORM  1
+#define DIRECTORY  2
+#define TEXTFILE  3
 
 
 //tft instance
@@ -84,6 +88,9 @@ HCScreen screen = HCScreen(tft);
 
 uint16_t tmp = 0;
 uint8_t wait = 0;
+int8_t sel = -1;
+uint8_t whichDisplay = 0;
+String lastPath = "";
 
 void showIcons() {
   screen.initIconGrid();
@@ -107,6 +114,63 @@ void showIcons() {
   screen.showIcon(17,&icon_save);
   screen.showIcon(18,&icon_check);
   screen.showIcon(19,&icon_reload);
+  whichDisplay = MAIN;
+}
+
+void showForm() {
+  tft.fillScreen(0xFFFF);
+  tft.setCursor(5,5);
+  tft.print("This is a Form");
+  screen.initIconGrid(96,96,2,1);
+  screen.showIcon(0,&icon_ok);
+  screen.showIcon(1,&icon_cancel); 
+  whichDisplay = FORM; 
+}
+
+void handleMain(int8_t selection) {
+  switch(selection) {
+    case 11: screen.setDirectory("/",SD_CS);
+    whichDisplay=DIRECTORY;
+    break;
+    case 16: showForm();
+      break;
+  }
+}
+
+void handleForm(int8_t selection) {
+  showIcons();
+}
+
+//a select event for browser occured
+void handleDirectory(String selection, int8_t selectionIndex) {
+
+  if (selection == "..") { //the go back entry was selected
+    String path = screen.getTitle();
+    Serial.println(path);
+    if ((path == "Error") || (path == "/")) {
+      //if error or root menu go back to parent menu
+      showIcons();
+    } else {
+      //otherwise set path one step up
+      uint8_t idx = path.lastIndexOf("/");
+      if (idx == 0) {
+        path = "/";
+      } else {
+        path.remove(idx);
+      }
+      screen.setDirectory(path,SD_CS);
+    }
+  } else {
+    //selected entry starts with an asteriks means it is a directory
+    if (selection.startsWith("*")) {
+      screen.setDirectory(selection.substring(1),SD_CS);
+    } else if (selection.endsWith(".txt") || selection.endsWith(".TXT")) {
+      //if it is a text file we will display the content
+      lastPath = screen.getTitle();
+      screen.setTextFile(screen.getTitle(),selection);
+      whichDisplay = TEXTFILE;
+    }
+  }
 }
 
 void setup() {
@@ -162,8 +226,21 @@ void loop() {
     //wait until button was released
     while (digitalRead(JOY_BTN) == 0) delay(10);
     //we get current selection from the library
+    sel = screen.getSelectionIndex();
     Serial.print("Selected = ");
-    Serial.println(screen.getSelectionIndex());
+    Serial.println(sel);
+    switch (whichDisplay) {
+      case MAIN: handleMain(sel);
+        break;
+      case FORM: handleForm(sel);
+        break;
+      case DIRECTORY: handleDirectory(screen.getSelection(),sel);
+        break;
+      case TEXTFILE: screen.setDirectory(lastPath,SD_CS);
+        whichDisplay = DIRECTORY;
+        break;
+        
+    }
   }
   delay(10);
   if (wait>0) wait--;
