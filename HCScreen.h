@@ -1,7 +1,7 @@
 /*
 ||
 || @file HCScreen.h
-|| @version 1.0
+|| @version 0.13
 || @author Gerald Lechner
 || @contact lechge@gmail.com
 ||
@@ -83,6 +83,7 @@ void setDirectory(String path, uint8_t SDcs);
 String getTitle();
 void setTextFile(String path, String fileName);
 void initIconGrid();
+void initIconGrid(uint8_t x, uint8_t y, uint8_t columns, uint8_t rows);
 void showIcon(uint8_t x, uint8_t y, const HCIcon *icon=NULL);
 void showIcon(uint8_t index, const HCIcon *icon=NULL);
 
@@ -113,7 +114,10 @@ private:
   uint8_t _lineHeight  = 8; //height of a line in pixels 8= minimal value
   uint8_t _rows = 4; //rows for icon grid
   uint8_t _columns = 5; //columns for icon grid
+  uint8_t _icons = 0; //number of icon_close
   uint8_t _gridMode = 0; //if 1 grid mode is aktive
+  uint8_t _gridX = 0; //grid x position
+  uint8_t _gridY = 0; //grid y position
 
   uint16_t convertColor(unsigned long webColor );
   void showLine(uint8_t lin, String txt, uint16_t font, uint16_t bg);

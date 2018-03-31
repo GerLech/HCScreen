@@ -1,3 +1,4 @@
+//Version 0.13
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
@@ -144,6 +145,7 @@ void HCScreen::showCodeset() {
 //show a 31x31 pixel icon on position calculated from index
 //the bitmap is a rgb bitmap with 8-bit R, G and B
 void HCScreen::showIcon(uint8_t index, const HCIcon *icon){
+  if (index >= _icons) index = _icons-1;
   uint8_t row  = index / _columns;
   uint8_t column = index % _columns;
   showIcon(column,row,icon);
@@ -153,8 +155,11 @@ void HCScreen::showIcon(uint8_t index, const HCIcon *icon){
 //the bitmap is a rgb bitmap with 8-bit R, G and B
 void HCScreen::showIcon(uint8_t column, uint8_t row, const HCIcon *icon){
   if (icon) {
-    uint8_t x = column * 32+1;
-    uint8_t y = row * 32+1;
+
+    uint8_t x = column * 32 +_gridX;
+    uint8_t y = row * 32 + _gridY;
+    if (x>(_tft.width()-32)) x = _tft.width()-32;
+    if (y>(_tft.height()-32)) y = _tft.height()-32;
     uint8_t ix = 0;
     uint8_t iy = 0;
     uint16_t idx = 0;
@@ -162,7 +167,7 @@ void HCScreen::showIcon(uint8_t column, uint8_t row, const HCIcon *icon){
     for (iy = 0; iy<icon->height; iy++){
       for (ix = 0; ix<icon->width; ix++) {
         color = _tft.Color565(icon->pixel_data[idx++], icon->pixel_data[idx++], icon->pixel_data[idx++]);
-        _tft.drawPixel(x+ix,y+iy,color);
+        _tft.drawPixel(x+ix+1,y+iy+1,color);
       }
     }
   }
@@ -186,6 +191,7 @@ void HCScreen::setTitle(String title, uint16_t fontColor, uint16_t bgColor){
 
 //fill content with a list of entries and activate selection
 void HCScreen::setMenu(String menu[],uint8_t entries){
+  _tft.fillScreen(_bgColor);
   uint8_t i;
   for (i=0; i<entries; i++){
     _content[i]=menu[i];
@@ -203,6 +209,7 @@ void HCScreen::setMenu(String menu[],uint8_t entries){
 //if SD card cant be mounted, error will be displayed
 //otherwise title bar shows the curent path
 void HCScreen::setDirectory(String path, uint8_t SDcs){
+  _tft.fillScreen(_bgColor);
   uint8_t cnt = 1;
   if (_title == "") _title = "/";
   _content[0]=".."; //to exit current menu
@@ -236,6 +243,7 @@ void HCScreen::setDirectory(String path, uint8_t SDcs){
 //long lines will be splitted
 //UTF8 codes will be converted
 void HCScreen::setTextFile(String path, String fileName) {
+  _tft.fillScreen(_bgColor);
   int8_t idx = 0;
   if (!path.endsWith("/")) path += "/";
   File dataFile = SD.open(path+fileName);
@@ -293,16 +301,29 @@ void HCScreen::setTextFile(String path, String fileName) {
   showContent();
 }
 
-//initialize icon grid calculate rows and columns
+
+//initialize icon grid full screen calculate rows and columns
 //clear background
 void HCScreen::initIconGrid() {
-  _tft.fillScreen(_gridBgColor);
+  initIconGrid(0,0,_tft.width()/32,_tft.height()/32);
+}
+
+//initialize icon grid on part of the screen
+void HCScreen::initIconGrid(uint8_t x, uint8_t y, uint8_t columns, uint8_t rows) {
+  if (x>(_tft.width()-32)) x = _tft.width()-32;
+  if (y>(_tft.height()-32)) y = _tft.height()-32;
+  if (rows > ((_tft.height()-y)/32)) rows = (_tft.height() - y) /32;
+  if (columns > ((_tft.width()-x)/32)) columns = (_tft.width() - x) /32;
+  _columns = columns;
+  _rows = rows;
+  _gridX = x;
+  _gridY = y;
+  _icons = _columns * _rows;
+  _tft.fillRect(x,y,columns*32,rows*32,_gridBgColor);
   _showTitle = 0;
   _gridMode = 1;
   _selectedLine = 0;
   _selectedColumn = 0;
-  _rows = _tft.height()/32;
-  _columns = _tft.width()/32;
   showGridSelection(_gridSelColor);
 }
 
@@ -512,7 +533,7 @@ uint8_t HCScreen::loadDir(fs::FS &fs, String path, uint8_t cnt){
 
 //draw rectangle around selected selected icon
 void HCScreen::showGridSelection(uint16_t color) {
-  uint8_t x = _selectedColumn * 32;
-  uint8_t y = _selectedLine * 32;
-  _tft.drawRect(x,y,32,32,color);
+  uint8_t x = _selectedColumn * 32 + _gridX;
+  uint8_t y = _selectedLine * 32 + _gridY;
+  _tft.drawRect(x,y,33,33,color);
 }
