@@ -1,7 +1,7 @@
 /*
 ||
 || @file HCScreen.h
-|| @version 0.13
+|| @version 0.14
 || @author Gerald Lechner
 || @contact lechge@gmail.com
 ||
@@ -45,6 +45,14 @@
 #define HC_YELLOW  0xFFFF00
 #define HC_WHITE   0xFFFFFF
 
+#define HC_NONE 0
+#define HC_MENU 1
+#define HC_ICONS 2
+#define HC_DIRECTORY 3
+#define HC_KEYBOARD 4
+#define HC_FILE 5
+#define HC_STATIC 6
+
 
 typedef struct { // Data stored for ICON
   unsigned int 	 width;
@@ -67,16 +75,24 @@ void showContent(); //refresh display with current content
 void setTitle(String title);
 void setTitle(String title, uint16_t fontColor, uint16_t bgColor);
 void setMenu(String menu[],uint8_t entries);
+void showKeyboard(uint8_t shift = 0);
+void initKeyboard(String result);
+typedef std::function<void(uint8_t mode)> TJoyCallback;
+void initJoy(uint8_t xPin, uint8_t yPin, uint8_t btnPin, TJoyCallback fn);
+void handleJoy();
+void handleDirectory();
 void setBaseColor(unsigned long font_color, unsigned long bg_color);
 void setSelectionColor(unsigned long font_color, unsigned long bg_color);
 void setTitleColor(unsigned long font_color, unsigned long bg_color);
 void setGridColor(unsigned long font_color, unsigned long bg_color);
+void setKeyboardColor(unsigned long font_color, unsigned long bg_color, unsigned long sel_color);
 void selectNext();
 void selectPrevious();
 void moveRight(); //move selection to right in grid mode
 void moveLeft(); //move selection to left in grid mode
 String getSelection();
 int8_t getSelectionIndex();
+String getResult();
 void showCodeset();
 void setLineHeight(uint8_t height);
 void setDirectory(String path, uint8_t SDcs);
@@ -106,6 +122,12 @@ private:
   uint16_t _titleBgColor; //color for background in title line 16 bit tft-format
   uint16_t _gridSelColor; //color for icon selection 16 bit tft-format
   uint16_t _gridBgColor; //color for background of icon grid line 16 bit tft-format
+  uint16_t _keyFntColor = 0; //font color for keyboard (black)
+  uint16_t _keyBgColor = 0xFFFF; //background for keys (white)
+  uint16_t _keySelColor = 0x1F; //selection color for kexboard (blue)
+  uint8_t _keyboard = 0; //flag for display is in keyboard mode
+  String _keyResult = ""; //entered data
+  uint8_t _keyCursor = 0; //Cursor for result input
   uint8_t _showTitle=0; //if 1 title will be displayed
   String _title; //title to be displayed
   String _content[100]; //content to be displayed
@@ -118,12 +140,25 @@ private:
   uint8_t _gridMode = 0; //if 1 grid mode is aktive
   uint8_t _gridX = 0; //grid x position
   uint8_t _gridY = 0; //grid y position
+  uint8_t _keyX = 0; //keyboard x position
+  uint8_t _keyY = 0; //keyboard y position
+  uint8_t _keyShift; //keyboard im shift zustand
+  uint8_t _joyX; //Pin to read x value from Joystik
+  uint8_t _joyY; //Pin to read y value from Joystik
+  uint8_t _joyBtn; //pin to get button state from Joystik
+  uint8_t _wait; //delay for joystik
+  uint8_t _screenMode; //active screen mode
+  String _lastPath; //path for text files
+  uint8_t _sdCs; //CS pin for sd card reader
 
   uint16_t convertColor(unsigned long webColor );
   void showLine(uint8_t lin, String txt, uint16_t font, uint16_t bg);
   uint8_t loadDir(fs::FS &fs, String path, uint8_t cnt);
   void showGridSelection(uint16_t color);
+  void showKeySelection(uint16_t color);
   void showOneLine(uint8_t lin, uint16_t fnt, uint16_t bg);
+  void keyPressed();
+  TJoyCallback _callback;
 };
 
 
