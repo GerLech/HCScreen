@@ -52,18 +52,8 @@
 #define JOY_Y  14 //Y-pos of joy stick
 #define JOY_X  15 //X-pos of joy stick
 
-//some constants
-#define MAIN_MENU 1
-#define SUB_MENU 2
-
-//examples of menu definition
-String main_menu[] = {"Submenu","Codeset","SD-Card","Entry4","Entry5","Entry6","Entry7","Entry8","Entry9","Entry10","Entry11","Entry12","Entry13","Entry14","Entry15","Zurück"};
-uint8_t main_menu_cnt = 16;
-
-String sub_menu[] = {"Sub1","Sub2","Sub3","Back"};
-uint8_t sub_menu_cnt = 4;
-
-volatile int whichMenu = 0; //define menu to switch handler
+volatile int tmp = 0; //to read joy values;
+uint8_t wait;
 
 
 
@@ -72,43 +62,11 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 //HC sreen library
 HCScreen screen = HCScreen(tft);
 
-//callback for joy button
-void clicked(int scmode){
-  Serial.println(scmode);
-  if (scmode == HC_MENU) {
-    String selection = screen.getSelection();
-    int selectionIndex = screen.getSelectionIndex();
-    Serial.println(selection);
-    if (whichMenu == MAIN_MENU) {
-      switch(selectionIndex) {
-        case 0: screen.setMenu(sub_menu,sub_menu_cnt);
-          screen.setTitle("Sub Menu");
-          whichMenu = SUB_MENU;
-          break;
-        case 1: screen.showCodeset();
-          break;
-        case 2: screen.setDirectory("/",SD_CS);
-          break;
-      }
-    } else {
-       if (selection == "Back") {
-          screen.setMenu(main_menu,main_menu_cnt);
-          screen.setTitle("Main Menu");
-          whichMenu=MAIN_MENU;
-      } else {
-        switch(selectionIndex) {
-        }
-      }
-     
-    }
-  } else {
-    screen.setMenu(main_menu,main_menu_cnt);
-    screen.setTitle("Main Menu");
-    whichMenu=MAIN_MENU;
-    
-  }
+//callback function called if the enter key was clicked
+void enter(int mode) {
+  //Send the result to the serial monitor
+  Serial.println("Ergebnis: "+screen.getResult());
 }
-
 
 void setup() {
   Serial.begin(115200);
@@ -117,16 +75,18 @@ void setup() {
   tft.setRotation(3);
   tft.fillScreen(ST7735_BLACK);
   screen.init();
-  screen.setBaseColor(0x9542f4,0xe3f7d9);
-  screen.setMenu(main_menu,main_menu_cnt);
-  screen.setTitle("Main Menu");
-  whichMenu = MAIN_MENU;
+  //set colors for keyboard black for font, light gray for background
+  //and red for selection and cursor
+  screen.setKeyboardColor(0x0,0xF0F0F0,0xFF0000);
+  //initialize keyboard set result to "Test"
+  screen.initKeyboard("Test");
   screen.setLineHeight(10);
-  //init joystick and set callback
-  screen.initJoy(JOY_X,JOY_Y,JOY_BTN,clicked);
+  //init joy stick handler
+  screen.initJoy(JOY_X,JOY_Y,JOY_BTN,enter);
+
 }
 
 void loop() {
-  //react on joystick events
+  //react on joystick changes
   screen.handleJoy();
 }

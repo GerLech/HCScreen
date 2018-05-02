@@ -37,6 +37,7 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library
 
 #include <HCScreen.h>
+//icons to be used
 #include "Icons/icon_home.c"
 #include "Icons/icon_ok.c"
 #include "Icons/icon_cancel.c"
@@ -77,8 +78,7 @@
 //some constants
 #define MAIN  0
 #define FORM  1
-#define DIRECTORY  2
-#define TEXTFILE  3
+#define DIRECTORY 2
 
 
 //tft instance
@@ -86,12 +86,10 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 //HC sreen library
 HCScreen screen = HCScreen(tft);
 
-uint16_t tmp = 0;
-uint8_t wait = 0;
-int8_t sel = -1;
-uint8_t whichDisplay = 0;
-String lastPath = "";
+//global variables
+uint8_t whichDisplay = 0; //variable to hold current display usage
 
+//show a grid with 20 icons
 void showIcons() {
   screen.initIconGrid();
   screen.showIcon(0,&icon_home);
@@ -117,6 +115,7 @@ void showIcons() {
   whichDisplay = MAIN;
 }
 
+//show some text and a grid with two icons bottom left
 void showForm() {
   tft.fillScreen(0xFFFF);
   tft.setCursor(5,5);
@@ -127,121 +126,48 @@ void showForm() {
   whichDisplay = FORM; 
 }
 
-void handleMain(int8_t selection) {
-  switch(selection) {
-    case 11: screen.setDirectory("/",SD_CS);
-    whichDisplay=DIRECTORY;
-    break;
-    case 16: showForm();
+//callback to handle selection
+//click on the open icon opens a SD card directory
+//click on setup icon open a test form
+void clicked(int8_t scmode) {
+  int selection = screen.getSelectionIndex();
+  switch(whichDisplay) {
+    case MAIN:
+      switch(selection) {
+        case 11: screen.setDirectory("/",SD_CS);
+          whichDisplay = DIRECTORY;
+        break;
+        case 16: showForm();
+          break;
+      }
+      break;
+    case FORM: showIcons();
+      break;
+    case DIRECTORY: showIcons();
       break;
   }
 }
 
-void handleForm(int8_t selection) {
-  showIcons();
-}
 
-//a select event for browser occured
-void handleDirectory(String selection, int8_t selectionIndex) {
-
-  if (selection == "..") { //the go back entry was selected
-    String path = screen.getTitle();
-    Serial.println(path);
-    if ((path == "Error") || (path == "/")) {
-      //if error or root menu go back to parent menu
-      showIcons();
-    } else {
-      //otherwise set path one step up
-      uint8_t idx = path.lastIndexOf("/");
-      if (idx == 0) {
-        path = "/";
-      } else {
-        path.remove(idx);
-      }
-      screen.setDirectory(path,SD_CS);
-    }
-  } else {
-    //selected entry starts with an asteriks means it is a directory
-    if (selection.startsWith("*")) {
-      screen.setDirectory(selection.substring(1),SD_CS);
-    } else if (selection.endsWith(".txt") || selection.endsWith(".TXT")) {
-      //if it is a text file we will display the content
-      lastPath = screen.getTitle();
-      screen.setTextFile(screen.getTitle(),selection);
-      whichDisplay = TEXTFILE;
-    }
-  }
-}
-
+//setup
 void setup() {
   Serial.begin(115200);
   //important initialize the display
   tft.initR(INITR_BLACKTAB);
   tft.setRotation(3);
   tft.fillScreen(ST7735_BLACK);
-  screen.init();
-  screen.setBaseColor(0x9542f4,0xe3f7d9);
+  //init HCScreen library
   screen.setLineHeight(10);
-  //define input pins
-  pinMode(JOY_BTN, INPUT_PULLUP);
-  pinMode(JOY_Y, INPUT_PULLUP);
-  pinMode(JOY_X, INPUT_PULLUP);
-  while (digitalRead(JOY_BTN)==0) delay(100);
+  screen.init();
+  //init joystick and set callback function
+  screen.initJoy(JOY_X,JOY_Y,JOY_BTN,clicked);
+
+  //show main icon grid
   showIcons();
 
 }
 
 void loop() {
-  if (wait == 0) {
-    //read joystick X currently not used
-    tmp = analogRead(JOY_X);
-    if (tmp > 3000) {
-      //if value > 3000 we select the next entry of a menu
-      //or scroll down if no selection active
-      screen.moveRight();
-      wait=30;
-    };
-    if (tmp < 1000) {
-      //if value < 1000 we select the previous entry of a menu
-      //or scroll up if no selection active
-      screen.moveLeft();
-      wait=30;
-    }
-    tmp = analogRead(JOY_Y);
-    if (tmp > 3000) {
-      //if value > 3000 we select the next entry of a menu
-      //or scroll down if no selection active
-      screen.selectNext();
-      wait=30;
-    };
-    if (tmp < 1000) {
-      //if value < 1000 we select the previous entry of a menu
-      //or scroll up if no selection active
-      screen.selectPrevious();
-      wait=30;
-    }
-  }  
-  //select button of the joystick
-  if (digitalRead(JOY_BTN)==0) {
-    //wait until button was released
-    while (digitalRead(JOY_BTN) == 0) delay(10);
-    //we get current selection from the library
-    sel = screen.getSelectionIndex();
-    Serial.print("Selected = ");
-    Serial.println(sel);
-    switch (whichDisplay) {
-      case MAIN: handleMain(sel);
-        break;
-      case FORM: handleForm(sel);
-        break;
-      case DIRECTORY: handleDirectory(screen.getSelection(),sel);
-        break;
-      case TEXTFILE: screen.setDirectory(lastPath,SD_CS);
-        whichDisplay = DIRECTORY;
-        break;
-        
-    }
-  }
-  delay(10);
-  if (wait>0) wait--;
+  //react on joystick
+  screen.handleJoy();
 }
